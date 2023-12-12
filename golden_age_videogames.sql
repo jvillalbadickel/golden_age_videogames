@@ -213,6 +213,47 @@ ORDER BY avg_user_score DESC
 LIMIT 1;
 
 
+-- This query identifies top-selling video games that are also highly rated by both critics and users.
+-- It uses Common Table Expressions (CTEs) to first isolate games with high critic and user scores,
+-- and then identifies the top-selling games. Finally, it combines these insights to find games 
+-- that are both commercially successful and critically acclaimed.
+WITH CriticFavoredGames AS (
+    SELECT 
+        r.game, 
+        AVG(r.critic_score) AS avg_critic_score
+    FROM reviews r
+    WHERE r.critic_score IS NOT NULL
+    GROUP BY r.game
+    HAVING AVG(r.critic_score) > 8
+),
+UserFavoredGames AS (
+    SELECT 
+        r.game, 
+        AVG(r.user_score) AS avg_user_score
+    FROM reviews r
+    WHERE r.user_score IS NOT NULL
+    GROUP BY r.game
+    HAVING AVG(r.user_score) > 8
+),
+TopSellingGames AS (
+    SELECT 
+        gs.game, 
+        SUM(gs.games_sold) AS total_sales
+    FROM game_sales gs
+    GROUP BY gs.game
+    ORDER BY total_sales DESC
+    LIMIT 100
+)
+SELECT 
+    t.game, 
+    t.total_sales, 
+    c.avg_critic_score, 
+    u.avg_user_score
+FROM TopSellingGames t
+JOIN CriticFavoredGames c ON t.game = c.game
+JOIN UserFavoredGames u ON t.game = u.game
+ORDER BY t.total_sales DESC, c.avg_critic_score DESC, u.avg_user_score DESC;
+
 
 
 
