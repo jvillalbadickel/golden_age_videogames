@@ -303,3 +303,96 @@ FROM TopSellingGames t
 JOIN CriticFavoredGames c ON t.game = c.game
 JOIN UserFavoredGames u ON t.game = u.game
 ORDER BY t.total_sales DESC, c.avg_critic_score DESC, u.avg_user_score DESC;
+
+
+-- Using CTE for initial data preparation
+WITH game_sales_prepared AS (
+    SELECT game, platform, publisher, SUM(games_sold) AS total_sales
+    FROM game_sales
+    GROUP BY game, platform, publisher
+),
+
+-- Using another CTE for reviews aggregation
+reviews_aggregated AS (
+    SELECT game, AVG(critic_score) AS avg_critic_score, AVG(user_score) AS avg_user_score
+    FROM reviews
+    GROUP BY game
+)
+
+-- Main Query: Joining prepared sales data with reviews, applying conditional logic and advanced sorting
+SELECT 
+    gs.game, 
+    gs.platform, 
+    gs.publisher, 
+    gs.total_sales,
+    ra.avg_critic_score,
+    ra.avg_user_score,
+    CASE 
+        WHEN gs.total_sales > 500000 THEN 'Bestseller'
+        ELSE 'Average'
+    END AS sales_category
+FROM 
+    game_sales_prepared gs
+INNER JOIN 
+    reviews_aggregated ra ON gs.game = ra.game
+WHERE 
+    gs.total_sales > 100000 AND ra.avg_critic_score > 7
+ORDER BY 
+    gs.total_sales DESC, ra.avg_critic_score DESC
+LIMIT 10;
+
+
+-- Ranking Games by Sales and Reviews
+SELECT 
+    gs.game, 
+    gs.platform, 
+    ROW_NUMBER() OVER (PARTITION BY gs.platform ORDER BY gs.total_sales DESC) AS sales_rank,
+    ra.avg_critic_score,
+    RANK() OVER (ORDER BY ra.avg_critic_score DESC) AS critic_rank
+FROM 
+    game_sales_prepared gs
+JOIN 
+    reviews_aggregated ra ON gs.game = ra.game
+WHERE 
+    gs.total_sales > 50000
+ORDER BY 
+    gs.platform, sales_rank;
+
+
+-- Top Performing Games with Subquery Filter
+SELECT 
+    game, 
+    platform,
+    total_sales,
+    avg_critic_score,
+    DENSE_RANK() OVER (ORDER BY total_sales DESC) AS sales_density_rank
+FROM 
+    (SELECT 
+        gs.game, 
+        gs.platform, 
+        gs.total_sales, 
+        ra.avg_critic_score
+    FROM 
+        game_sales_prepared gs
+    INNER JOIN 
+        reviews_aggregated ra ON gs.game = ra.game
+    WHERE 
+        ra.avg_user_score > 8) AS filtered_games
+ORDER BY 
+    sales_density_rank;
+
+
+-- Comparative Analysis of Sales and Scores
+SELECT 
+    gs.game,
+    gs.platform,
+    gs.total_sales,
+    ra.avg_critic_score,
+    AVG(gs.total_sales) OVER (PARTITION BY gs.platform) AS avg_platform_sales,
+    AVG(ra.avg_critic_score) OVER () AS avg_all_games_critic_score
+FROM 
+    game_sales_prepared gs
+INNER JOIN 
+    reviews_aggregated ra ON gs.game = ra.game
+ORDER BY 
+    gs.platform, gs.total_sales DESC;
